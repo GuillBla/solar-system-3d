@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Solar System Motion</title>
+    <meta name="description" content="Simulation 3D du Système solaire : positions réelles des planètes à n'importe quelle date et bac à sable gravitationnel N-corps." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='9' fill='%23ffc35a'/%3E%3Cellipse cx='32' cy='32' rx='28' ry='11' fill='none' stroke='%237aa7ff' stroke-width='3'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="scene"></div>
+
+    <div id="loading">
+      <div class="loading-inner">
+        <div class="loading-orbit"><span></span></div>
+        <p>Chargement du Système solaire…</p>
+        <div class="bar"><div id="loading-bar"></div></div>
+      </div>
+    </div>
+
+    <!-- Top-left: title + clock -->
+    <header class="panel" id="clock-panel">
+      <div class="brand">Solar System Motion</div>
+      <div id="date" class="mono">—</div>
+      <div class="sub">
+        <span id="speed-label">1 sem/s</span>
+        <span id="mode-badge" class="badge">Éphémérides</span>
+        <span id="accuracy-badge" class="badge warn" hidden title="Les éléments orbitaux du JPL utilisés sont valides de 1800 à 2050 ; au-delà la précision diminue progressivement.">Précision réduite</span>
+      </div>
+    </header>
+
+    <!-- Top-right: view options -->
+    <div class="panel" id="options-panel">
+      <div class="segmented" role="group" aria-label="Mode de simulation">
+        <button data-mode="ephemeris" class="active" title="Positions réelles calculées à partir des éléments orbitaux du JPL (M)">Éphémérides</button>
+        <button data-mode="nbody" title="Intégration numérique de la gravité entre tous les corps (M)">N-corps</button>
+      </div>
+      <div class="segmented" role="group" aria-label="Échelle">
+        <button data-scale="readable" class="active" title="Distances et tailles compressées pour tout voir (S)">Lisible</button>
+        <button data-scale="real" title="Distances et tailles réelles : les planètes deviennent minuscules ! (S)">Réaliste</button>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="toggle-orbits" checked /> Orbites</label>
+        <label><input type="checkbox" id="toggle-labels" checked /> Noms</label>
+        <label><input type="checkbox" id="toggle-belts" checked /> Ceintures</label>
+      </div>
+      <button id="help-btn" class="ghost" title="Raccourcis clavier (H)">?</button>
+    </div>
+
+    <!-- Left: body navigator -->
+    <nav class="panel" id="nav-panel" aria-label="Astres"></nav>
+
+    <!-- Right: info -->
+    <aside class="panel" id="info-panel" hidden>
+      <button class="close ghost" id="info-close" aria-label="Fermer">×</button>
+      <div class="info-head">
+        <span class="swatch" id="info-swatch"></span>
+        <div>
+          <h2 id="info-name">—</h2>
+          <div id="info-type" class="muted"></div>
+        </div>
+      </div>
+      <p id="info-desc"></p>
+      <dl id="info-stats"></dl>
+    </aside>
+
+    <!-- N-body sandbox -->
+    <section class="panel" id="sandbox-panel" hidden>
+      <h3>Bac à sable gravitationnel</h3>
+      <label class="slider">
+        <span>Masse de Jupiter <b id="jup-val">×1</b></span>
+        <input type="range" id="jup-mass" min="0" max="3" step="0.01" value="0" />
+      </label>
+      <label class="slider">
+        <span>Masse du Soleil <b id="sun-val">×1</b></span>
+        <input type="range" id="sun-mass" min="-0.5" max="0.5" step="0.01" value="0" />
+      </label>
+      <div class="row">
+        <button id="rogue-btn">Lancer une étoile vagabonde</button>
+        <button id="reset-btn" class="ghost">Réinitialiser</button>
+      </div>
+      <div class="muted small">Dérive d'énergie : <span id="energy" class="mono">0</span></div>
+    </section>
+
+    <!-- Bottom: time controls -->
+    <footer class="panel" id="time-panel">
+      <button id="slower" class="ghost" title="Plus lent / en arrière (←)">⏪</button>
+      <button id="play" title="Pause / lecture (Espace)">⏸</button>
+      <button id="faster" class="ghost" title="Plus rapide (→)">⏩</button>
+      <select id="speed-select" aria-label="Vitesse"></select>
+      <input type="date" id="date-input" aria-label="Aller à la date" />
+      <button id="today" class="ghost" title="Revenir à maintenant (T)">Aujourd'hui</button>
+    </footer>
+
+    <div id="help" class="panel" hidden>
+      <h3>Raccourcis</h3>
+      <ul>
+        <li><kbd>Espace</kbd> pause / lecture</li>
+        <li><kbd>←</kbd> <kbd>→</kbd> vitesse du temps</li>
+        <li><kbd>0</kbd>–<kbd>9</kbd> Soleil, Mercure … Pluton</li>
+        <li><kbd>M</kbd> mode éphémérides / N-corps</li>
+        <li><kbd>S</kbd> échelle lisible / réaliste</li>
+        <li><kbd>O</kbd> orbites · <kbd>L</kbd> noms · <kbd>B</kbd> ceintures</li>
+        <li><kbd>T</kbd> aujourd'hui · <kbd>Échap</kbd> recentrer</li>
+        <li>Souris : glisser pour tourner, molette pour zoomer, clic sur un astre pour le suivre</li>
+      </ul>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>

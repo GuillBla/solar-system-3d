@@ -14,6 +14,8 @@ Les planètes, les lunes, les comètes et les sondes sont à leur **vraie positi
 | ![Saturne](docs/saturn.png) | ![Jupiter](docs/jupiter-io-shadow.png) |
 | **Visite guidée : 12 événements** | **Mode N-corps : Jupiter ×158 dévie les comètes** |
 | ![Événements](docs/events.png) | ![N-corps](docs/nbody.png) |
+| **Fiche avec de vraies photos (ici Voyager 1)** | **Photo agrandie : Jupiter vue par Juno** |
+| ![Fiche photo](docs/photo-panel.png) | ![Visionneuse](docs/photo-lightbox.png) |
 
 ## Fonctionnalités
 
@@ -46,6 +48,11 @@ Les planètes, les lunes, les comètes et les sondes sont à leur **vraie positi
 
 **Visite guidée « Événements »**
 Voyager 1 à Jupiter et à Saturne, Voyager 2 à Neptune, Halley en 1986, Hale-Bopp en 1997, Mars au plus près en 2003, New Horizons à Pluton, la grande conjonction de 2020, les éclipses de 2024, 2025 et 2026, et le retour de Halley en 2061. Chaque étape règle la date, la caméra, la vitesse et l'échelle, avec un texte explicatif. Une étape se partage par un lien `?event=…`.
+
+**Vraies photos**
+- Chaque astre, comète et sonde a sa fiche illustrée de 1 à 3 **photographies réelles** : Hubble, Cassini, Juno, Voyager, New Horizons, Rosetta, Apollo… (55 images).
+- Légende en français et crédit cliquable sous chaque photo ; clic sur la photo pour l'agrandir (flèches du clavier pour passer à la suivante, `Échap` pour fermer).
+- Toutes les images viennent de Wikimedia Commons, sous licence libre (domaine public, CC0, CC BY ou CC BY-SA). La liste complète des auteurs et licences est dans [CREDITS.md](CREDITS.md).
 
 **Le temps**
 - Démarre à la date et à l'heure actuelles (UTC).
@@ -113,10 +120,11 @@ node tools/fetch-comets.mjs       # data/comets.json     (SBDB + éléments oscu
 node tools/fetch-spacecraft.mjs   # data/spacecraft.json (trajectoires des sondes)
 node tools/fetch-reference.mjs    # tests/reference.json (positions de référence pour les tests)
 node tools/check-spacecraft.mjs   # vérifie l'interpolation des sondes contre Horizons
+python tools/fetch-photos.py     # images/photos/ + src/data/photos.js + CREDITS.md (Wikimedia Commons, Pillow requis)
 node tools/screenshot.mjs out.png "http://localhost:8000/?event=eclipse-2024"   # capture (Chrome sans interface)
 ```
 
-Poids total de `data/` : environ 1,15 Mo (≈ 410 ko compressés). Les trajectoires des sondes, qui en représentent l'essentiel, sont chargées après l'affichage de la scène.
+Poids total de `data/` : environ 1,15 Mo (≈ 410 ko compressés). Les trajectoires des sondes, qui en représentent l'essentiel, sont chargées après l'affichage de la scène. Les photos (`images/photos/`, WebP, ≈ 2,7 Mo au total) ne sont chargées qu'à l'ouverture de la fiche correspondante.
 
 ## La physique, en bref
 
@@ -169,6 +177,8 @@ Les lunes et les sondes, elles, ne sont pas intégrées : leur trajectoire est c
 index.html              page + importmap (Three.js 0.160 via jsDelivr)
 style.css               interface
 data/                   données générées (lunes, comètes, sondes)
+images/photos/          vraies photos des astres et des sondes (Wikimedia Commons)
+CREDITS.md              auteurs et licences des photos
 src/
   main.js               scène, caméra, boucle de rendu
   simulation.js         horloge + modes éphémérides / N-corps, sondes
@@ -198,4 +208,5 @@ legacy/                 première version (Python / pygame)
 - Lunes des planètes : [JPL Planetary Satellite Mean Elements](https://ssd.jpl.nasa.gov/sats/elem/).
 - Lune : J. Meeus, *Astronomical Algorithms*, 2ᵉ éd., chap. 47 (théorie ELP-2000/82 de M. Chapront-Touzé et J. Chapront). ΔT : polynômes d'Espenak et Meeus.
 - Orientation des astres : rapport du groupe de travail de l'IAU sur les coordonnées cartographiques et les éléments de rotation (2015).
+- Photos : [Wikimedia Commons](https://commons.wikimedia.org/) — NASA, ESA, JPL et auteurs individuels ; détail fichier par fichier dans [CREDITS.md](CREDITS.md).
 - Rendu : [Three.js](https://threejs.org).

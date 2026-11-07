@@ -10,6 +10,7 @@ import { cometElements } from './physics/comets.js';
 import { shadowAxisHit, earthShadowAtMoon } from './physics/eclipse.js';
 import { cometActivity } from './render/cometView.js';
 import { ROGUE_STAR } from './simulation.js';
+import { PHOTOS } from './data/photos.js';
 
 const $ = (id) => document.getElementById(id);
 const nf = (digits = 0) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: digits, minimumFractionDigits: digits });
@@ -58,6 +59,7 @@ export class UI {
     this.bindTime();
     this.bindOptions();
     this.bindSandbox();
+    this.bindPhotos();
     this.bindKeyboard();
     this.applySpeed();
   }
@@ -298,6 +300,14 @@ export class UI {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       const k = e.key.toLowerCase();
+      if (!$('lightbox').hidden) {
+        // The lightbox captures navigation keys while it is open.
+        if (k === 'escape') this.closeLightbox();
+        else if (k === 'arrowleft') this.stepPhoto(-1);
+        else if (k === 'arrowright') this.stepPhoto(1);
+        e.preventDefault();
+        return;
+      }
       if (k === ' ') { e.preventDefault(); this.togglePause(); }
       else if (k === 'arrowleft') this.setSpeedIndex(this.speedIndex - 1);
       else if (k === 'arrowright') this.setSpeedIndex(this.speedIndex + 1);
@@ -373,7 +383,97 @@ export class UI {
     $('info-desc').textContent = body.description;
     $('info-swatch').style.background = `radial-gradient(circle at 35% 35%, #fff8, ${body.color} 45%, #000 120%)`;
     $('info-swatch').style.boxShadow = `0 0 18px ${body.color}66`;
+    if (id !== this.photoBody) { this.photoBody = id; this.photoIndex = 0; }
+    this.renderPhoto();
     this.renderStats(id);
+  }
+
+  // ---------- Photos ----------
+  bindPhotos() {
+    this.photoBody = null;
+    this.photoIndex = 0;
+    const img = $('photo-img');
+    img.addEventListener('load', () => $('photo-frame').classList.add('loaded'));
+    img.addEventListener('error', () => {
+      // Missing file: fall back to the coloured swatch only.
+      $('info-photo').hidden = true;
+    });
+    const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+    $('photo-prev').addEventListener('click', stop(() => this.stepPhoto(-1)));
+    $('photo-next').addEventListener('click', stop(() => this.stepPhoto(1)));
+    $('photo-frame').addEventListener('click', () => this.openLightbox());
+    $('photo-frame').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); this.openLightbox(); }
+    });
+    $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) this.closeLightbox(); });
+    $('lightbox-close').addEventListener('click', () => this.closeLightbox());
+    $('lightbox-prev').addEventListener('click', () => this.stepPhoto(-1));
+    $('lightbox-next').addEventListener('click', () => this.stepPhoto(1));
+  }
+
+  photos() {
+    return PHOTOS[this.photoBody] || [];
+  }
+
+  creditHTML(p) {
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const lic = /^public domain$/i.test(p.license) ? 'Domaine public' : p.license;
+    const licHTML = p.licenseUrl ? `<a href="${esc(p.licenseUrl)}" target="_blank" rel="noopener">${esc(lic)}</a>` : esc(lic);
+    return `Crédit : <a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener">${esc(p.credit)}</a> — ${licHTML}`;
+  }
+
+  renderPhoto() {
+    const list = this.photos();
+    const fig = $('info-photo');
+    if (!list.length) { fig.hidden = true; return; }
+    const p = list[this.photoIndex];
+    fig.hidden = false;
+    const img = $('photo-img');
+    if (!img.src.endsWith(p.file)) {
+      $('photo-frame').classList.remove('loaded');
+      img.src = p.file;
+    }
+    img.alt = p.caption;
+    img.style.objectPosition = p.pos || 'center';
+    $('photo-caption').textContent = p.caption;
+    $('photo-credit').innerHTML = this.creditHTML(p);
+    const many = list.length > 1;
+    $('photo-prev').hidden = $('photo-next').hidden = !many;
+    $('photo-dots').innerHTML = many ? list.map((_, i) => `<span class="${i === this.photoIndex ? 'on' : ''}"></span>`).join('') : '';
+    // Warm the cache for the next photo so stepping feels instant.
+    if (many) new Image().src = list[(this.photoIndex + 1) % list.length].file;
+    if (!$('lightbox').hidden) this.renderLightbox();
+  }
+
+  stepPhoto(delta) {
+    const n = this.photos().length;
+    if (n < 2) return;
+    this.photoIndex = (this.photoIndex + delta + n) % n;
+    this.renderPhoto();
+  }
+
+  openLightbox() {
+    if (!this.photos().length) return;
+    $('lightbox').hidden = false;
+    this.renderLightbox();
+    $('lightbox-close').focus();
+  }
+
+  closeLightbox() {
+    $('lightbox').hidden = true;
+    $('photo-frame').focus();
+  }
+
+  renderLightbox() {
+    const list = this.photos();
+    const p = list[this.photoIndex];
+    if (!p) return;
+    $('lightbox-img').src = p.file;
+    $('lightbox-img').alt = p.caption;
+    $('lightbox-caption').textContent = p.caption;
+    $('lightbox-credit').innerHTML = this.creditHTML(p);
+    $('lightbox-step').textContent = list.length > 1 ? `${this.photoIndex + 1} / ${list.length}` : '';
+    $('lightbox-prev').hidden = $('lightbox-next').hidden = list.length < 2;
   }
 
   renderStats(id) {

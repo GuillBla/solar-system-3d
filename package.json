@@ -6,6 +6,6 @@
   "description": "Simulation 3D du Système solaire (Three.js) : éphémérides réelles et bac à sable gravitationnel N-corps",
   "scripts": {
     "start": "python -m http.server 8000",
-    "test": "node tests/physics.test.js"
+    "test": "node tests/physics.test.js && node tests/photos.test.js"
   }
 }

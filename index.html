@@ -69,6 +69,18 @@
     <!-- Right: info -->
     <aside class="panel" id="info-panel" hidden>
       <button class="close ghost" id="info-close" aria-label="Fermer">×</button>
+      <figure class="photo" id="info-photo" hidden>
+        <div class="photo-frame" id="photo-frame" role="button" tabindex="0" title="Agrandir la photo">
+          <img id="photo-img" alt="" decoding="async" loading="lazy" />
+          <button class="photo-nav prev" id="photo-prev" aria-label="Photo précédente">‹</button>
+          <button class="photo-nav next" id="photo-next" aria-label="Photo suivante">›</button>
+          <div class="photo-dots" id="photo-dots"></div>
+        </div>
+        <figcaption>
+          <span id="photo-caption"></span>
+          <span class="credit" id="photo-credit"></span>
+        </figcaption>
+      </figure>
       <div class="info-head">
         <span class="swatch" id="info-swatch"></span>
         <div>
@@ -133,6 +145,21 @@
       <input type="date" id="date-input" aria-label="Aller à la date" />
       <button id="today" class="ghost" title="Revenir à maintenant (T)">Aujourd'hui</button>
     </footer>
+
+    <!-- Photo lightbox -->
+    <div id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo agrandie">
+      <figure>
+        <img id="lightbox-img" alt="" />
+        <figcaption>
+          <span id="lightbox-caption"></span>
+          <span class="credit" id="lightbox-credit"></span>
+          <span class="muted small" id="lightbox-step"></span>
+        </figcaption>
+      </figure>
+      <button class="ghost lb-nav prev" id="lightbox-prev" aria-label="Photo précédente">‹</button>
+      <button class="ghost lb-nav next" id="lightbox-next" aria-label="Photo suivante">›</button>
+      <button class="ghost close" id="lightbox-close" aria-label="Fermer">×</button>
+    </div>
 
     <div id="help" class="panel" hidden>
       <h3>Raccourcis</h3>

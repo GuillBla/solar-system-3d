@@ -1,6 +1,8 @@
 # Solar System Motion
 
 Simulation 3D interactive du Système solaire dans le navigateur (Three.js).
+
+**▶ Démo en ligne : https://guillbla.github.io/solar-system-3d/**
 Les planètes, les lunes, les comètes et les sondes sont à leur **vraie position**, à n'importe quelle date. Les **éclipses** se produisent au bon endroit et au bon moment, une **visite guidée** fait revivre les grands événements, et un **bac à sable gravitationnel N-corps** permet de voir ce qui se passe quand on joue avec la gravité.
 
 ![Vue d'ensemble](docs/overview.png)
@@ -94,8 +96,8 @@ Voyager 1 à Jupiter et à Saturne, Voyager 2 à Neptune, Halley en 1986, Hale-B
 Aucune compilation n'est nécessaire : ce sont des modules ES natifs et Three.js est chargé depuis un CDN. Il faut seulement un serveur HTTP local, car les navigateurs bloquent les modules ouverts en `file://`.
 
 ```bash
-git clone https://github.com/GuillBla/Solar-System-Motion.git
-cd Solar-System-Motion
+git clone https://github.com/GuillBla/solar-system-3d.git
+cd solar-system-3d
 python -m http.server 8000
 # puis ouvrir http://localhost:8000
 ```
@@ -108,7 +110,7 @@ npm test
 
 ### Publier sur GitHub Pages
 
-Dans *Settings → Pages*, choisir *Deploy from a branch*, puis la branche `main` et le dossier `/ (root)`. Le site sera accessible à l'adresse `https://<utilisateur>.github.io/Solar-System-Motion/`.
+Dans *Settings → Pages*, choisir *Deploy from a branch*, puis la branche `main` et le dossier `/ (root)`. Le site sera accessible à l'adresse `https://<utilisateur>.github.io/solar-system-3d/`.
 
 ### Régénérer les données
 

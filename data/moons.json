@@ -1,0 +1,152 @@
+{
+ "source": "Mean elements fitted to JPL Horizons (1975–2035), initialized from JPL Planetary Satellite Mean Elements. Angles in deg, rates in deg/day, epoch JD 2451545.0 TDB, a in km.",
+ "moons": {
+  "io": {
+   "pole": [
+    268.1,
+    64.5
+   ],
+   "epoch": 2451545,
+   "a": 421765.7,
+   "e": 0.004128,
+   "i": 0.01674,
+   "node": 288.7092,
+   "nodeRate": -0.003269551,
+   "peri": 120.30883,
+   "periRate": -0.736236926,
+   "u": 91.34226,
+   "uRate": 203.492230302,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 210,
+    "maxErrDeg": 0.048
+   }
+  },
+  "europa": {
+   "pole": [
+    268.1,
+    64.5
+   ],
+   "epoch": 2451545,
+   "a": 671060.8,
+   "e": 0.0093,
+   "i": 0.46461,
+   "node": 184.65267,
+   "nodeRate": -0.032618169,
+   "peri": 44.39793,
+   "periRate": -0.706889859,
+   "u": 29.88404,
+   "uRate": 101.407343873,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 612,
+    "maxErrDeg": 0.114
+   }
+  },
+  "ganymede": {
+   "pole": [
+    268.2,
+    64.6
+   ],
+   "epoch": 2451545,
+   "a": 1070429.5,
+   "e": 0.001565,
+   "i": 0.20345,
+   "node": 44.94268,
+   "nodeRate": -0.006381256,
+   "peri": 236.87324,
+   "periRate": 0.012577828,
+   "u": 176.7473,
+   "uRate": 50.323989361,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 1385,
+    "maxErrDeg": 0.178
+   }
+  },
+  "callisto": {
+   "pole": [
+    268.7,
+    64.8
+   ],
+   "epoch": 2451545,
+   "a": 1882744.9,
+   "e": 0.007352,
+   "i": 0.233,
+   "node": 301.36963,
+   "nodeRate": -0.002144657,
+   "peri": 52.53383,
+   "periRate": 0.003983298,
+   "u": 139.03335,
+   "uRate": 21.573218169,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 868,
+    "maxErrDeg": 0.053
+   }
+  },
+  "titan": {
+   "pole": [
+    36.4,
+    84
+   ],
+   "epoch": 2451545,
+   "a": 1221865.2,
+   "e": 0.028722,
+   "i": -0.34257,
+   "node": 203.16422,
+   "nodeRate": -0.001277913,
+   "peri": 5.0268,
+   "periRate": 0.002691331,
+   "u": 168.57614,
+   "uRate": 22.578254702,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 359,
+    "maxErrDeg": 0.032
+   }
+  },
+  "triton": {
+   "pole": [
+    299.36,
+    43.46
+   ],
+   "epoch": 2451545,
+   "a": 354759.1,
+   "e": 0.000001,
+   "i": 156.82857,
+   "node": 177.86586,
+   "nodeRate": 0.001434539,
+   "peri": 100.18071,
+   "periRate": -6.68804995,
+   "u": 58.63752,
+   "uRate": 61.258695869,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 76,
+    "maxErrDeg": 0.02
+   }
+  },
+  "charon": {
+   "pole": [
+    132.993,
+    -6.163
+   ],
+   "epoch": 2451545,
+   "a": 19595.8,
+   "e": 0.000001,
+   "i": 0.08346,
+   "node": 9.79706,
+   "nodeRate": 0.000122439,
+   "peri": 92.65802,
+   "periRate": -0.958103984,
+   "u": 294.36519,
+   "uRate": 56.362408495,
+   "fit": {
+    "samples": 360,
+    "rmsKm": 5,
+    "maxErrDeg": 0.02
+   }
+  }
+ }
+}

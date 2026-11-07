@@ -1,7 +1,9 @@
 // Body orientation (IAU model) and kinematic moon positions.
 // Pure math, no three.js, so it can be unit-tested with node.
 
-import { DEG, stateFromElements, AU_KM } from './kepler.js';
+import { DEG, AU_KM } from './kepler.js';
+import { moonPosition } from './moon.js';
+import { satelliteOffset } from './satellites.js';
 import { daysSinceJ2000 } from '../time.js';
 
 export const OBLIQUITY = 23.4392911 * DEG; // mean obliquity of the ecliptic at J2000
@@ -33,32 +35,23 @@ export function bodyOrientation(pole, jd) {
 
 /**
  * Position of a moon relative to its parent, ecliptic frame, in km.
+ * The Moon uses the truncated ELP-2000 theory; the other moons use their
+ * fitted mean elements (`moon.orbit`, from data/moons.json). Without them
+ * (data not loaded) a circular equatorial orbit is used as a fallback.
  * Returns {offsetKm:[x,y,z], distanceKm}.
  */
 export function moonOffset(moon, parent, jd) {
-  const d = daysSinceJ2000(jd);
-  if (moon.frame === 'ecliptic') {
-    const m = moon.lunar;
-    const L = (m.L[0] + m.L[1] * d) * DEG;
-    const node = (m.node[0] + m.node[1] * d) * DEG;
-    const peri = (m.peri[0] + m.peri[1] * d) * DEG;
-    const { pos } = stateFromElements({
-      a: moon.distanceKm, e: m.e, i: m.i * DEG, node, peri: peri - node, M: L - peri,
-    });
-    return { offsetKm: pos, distanceKm: Math.hypot(pos[0], pos[1], pos[2]) };
+  let pos;
+  if (moon.id === 'moon') pos = moonPosition(jd).pos;
+  else if (moon.orbit) pos = satelliteOffset(moon.orbit, jd);
+  else {
+    const o = bodyOrientation(parent.pole, jd);
+    const B = cross(o.pole, o.node);
+    const lambda = (2 * Math.PI * daysSinceJ2000(jd)) / moon.periodDays;
+    const c = Math.cos(lambda) * moon.distanceKm, s = Math.sin(lambda) * moon.distanceKm;
+    pos = [c * o.node[0] + s * B[0], c * o.node[1] + s * B[1], c * o.node[2] + s * B[2]];
   }
-  const o = bodyOrientation(parent.pole, jd);
-  let lambda;
-  if (moon.lockedToParentRotation) lambda = o.W; // tidally locked pair (Pluto–Charon)
-  else lambda = (moon.L0 + moon.Ld * d) * DEG;
-  let B = cross(o.pole, o.node);
-  if (moon.tilt) {
-    const t = moon.tilt * DEG;
-    B = B.map((v, k) => v * Math.cos(t) + o.pole[k] * Math.sin(t));
-  }
-  const c = Math.cos(lambda) * moon.distanceKm, s = Math.sin(lambda) * moon.distanceKm;
-  const pos = [c * o.node[0] + s * B[0], c * o.node[1] + s * B[1], c * o.node[2] + s * B[2]];
-  return { offsetKm: pos, distanceKm: moon.distanceKm };
+  return { offsetKm: pos, distanceKm: Math.hypot(pos[0], pos[1], pos[2]) };
 }
 
 /** Offset of the Earth from the Earth–Moon barycenter (AU, ecliptic). */

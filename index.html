@@ -37,6 +37,7 @@
       <div class="sub">
         <span id="speed-label">1 sem/s</span>
         <span id="mode-badge" class="badge">Éphémérides</span>
+        <span id="eclipse-badge" class="badge eclipse" hidden></span>
         <span id="accuracy-badge" class="badge warn" hidden title="Les éléments orbitaux du JPL utilisés sont valides de 1800 à 2050 ; au-delà la précision diminue progressivement.">Précision réduite</span>
       </div>
     </header>
@@ -55,7 +56,10 @@
         <label><input type="checkbox" id="toggle-orbits" checked /> Orbites</label>
         <label><input type="checkbox" id="toggle-labels" checked /> Noms</label>
         <label><input type="checkbox" id="toggle-belts" checked /> Ceintures</label>
+        <label><input type="checkbox" id="toggle-comets" checked /> Comètes</label>
+        <label><input type="checkbox" id="toggle-probes" checked /> Sondes</label>
       </div>
+      <button id="events-btn" title="Visite guidée des grands événements (E)">✦ Événements</button>
       <button id="help-btn" class="ghost" title="Raccourcis clavier (H)">?</button>
     </div>
 
@@ -75,6 +79,32 @@
       <p id="info-desc"></p>
       <dl id="info-stats"></dl>
     </aside>
+
+    <!-- Guided tour -->
+    <section class="panel" id="events-panel" hidden>
+      <div class="events-head">
+        <h3>Événements</h3>
+        <button class="ghost close" id="events-close" aria-label="Fermer">×</button>
+      </div>
+      <p class="muted small">Revivez les grands moments du Système solaire : date, caméra, vitesse et échelle sont réglées pour vous.</p>
+      <div id="events-list"></div>
+    </section>
+    <section class="panel" id="event-card" hidden>
+      <div class="event-top">
+        <div>
+          <div id="event-when" class="event-when"></div>
+          <h3 id="event-title"></h3>
+        </div>
+        <button class="ghost close" id="event-close" aria-label="Fermer">×</button>
+      </div>
+      <p id="event-caption"></p>
+      <div class="event-nav">
+        <button id="event-prev" class="ghost" title="Événement précédent">‹ Précédent</button>
+        <span id="event-step" class="muted small"></span>
+        <button id="event-share" class="ghost" title="Copier le lien de cet événement">Partager</button>
+        <button id="event-next" title="Événement suivant (N)">Suivant ›</button>
+      </div>
+    </section>
 
     <!-- N-body sandbox -->
     <section class="panel" id="sandbox-panel" hidden>
@@ -113,6 +143,7 @@
         <li><kbd>M</kbd> mode éphémérides / N-corps</li>
         <li><kbd>S</kbd> échelle lisible / réaliste</li>
         <li><kbd>O</kbd> orbites · <kbd>L</kbd> noms · <kbd>B</kbd> ceintures</li>
+        <li><kbd>C</kbd> comètes · <kbd>V</kbd> sondes · <kbd>E</kbd> événements · <kbd>N</kbd> suivant</li>
         <li><kbd>T</kbd> aujourd'hui · <kbd>Échap</kbd> recentrer</li>
         <li>Souris : glisser pour tourner, molette pour zoomer, clic sur un astre pour le suivre</li>
       </ul>

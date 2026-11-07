@@ -8,12 +8,20 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 import { SUN, PLANETS, MOONS, BODY_BY_ID } from './data/bodies.js';
-import { planetElements, sampleOrbit, periodDays } from './physics/kepler.js';
+import { COMETS } from './data/comets.js';
+import { SPACECRAFT } from './data/spacecraft.js';
+import { EVENT_BY_ID } from './data/events.js';
+import { loadJSON, applyMoonOrbits } from './data/loader.js';
+import { planetElements, planetState, sampleOrbit, periodDays, AU_KM } from './physics/kepler.js';
+import { cometElements } from './physics/comets.js';
+import { Trajectory } from './physics/spacecraft.js';
 import { bodyOrientation, moonOffset } from './physics/orientation.js';
-import { Simulation, ROGUE_STAR } from './simulation.js';
+import { Simulation, ROGUE_STAR, probeLocalFrame } from './simulation.js';
 import { ScaleMapper, UNITS_PER_AU } from './render/scale.js';
 import { createLoader } from './render/textures.js';
-import { BodyView } from './render/bodyView.js';
+import { BodyView, SHADOWED } from './render/bodyView.js';
+import { CometView } from './render/cometView.js';
+import { ProbeView, ProbePath } from './render/probeView.js';
 import { OrbitLine, Trail } from './render/orbits.js';
 import { createSky, Belt } from './render/environment.js';
 import { UI } from './ui.js';
@@ -23,18 +31,34 @@ const container = document.getElementById('scene');
 const ecl = (v) => new THREE.Vector3(v[0], v[2], -v[1]); // ecliptic -> three
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+// Eclipse casters for each shadowed body. The Earth's shadow on the Moon is
+// reddened by the light its atmosphere refracts into the umbra.
+const OCCLUDERS = {
+  earth: ['moon'], moon: ['earth'],
+  jupiter: ['io', 'europa', 'ganymede', 'callisto'],
+  io: ['jupiter'], europa: ['jupiter'], ganymede: ['jupiter'], callisto: ['jupiter'],
+  saturn: ['titan'], titan: ['saturn'],
+};
+const UMBRA_TINT = { earth: new THREE.Vector3(0.36, 0.1, 0.035) };
+const NO_TINT = new THREE.Vector3();
+
 class App {
-  constructor() {
+  constructor(comets) {
     this.sim = new Simulation();
+    this.sim.setComets(comets);
+    this.comets = comets;
     this.mapper = new ScaleMapper();
     this.showOrbits = true;
     this.showLabels = true;
+    this.showComets = true;
+    this.showProbes = true;
     this.focusId = 'sun';
     this.focusPoint = new THREE.Vector3();
     this.transition = null; // camera/focus animation
     this.scaleKeep = null; // camera distance preservation during scale blends
     this.display = new Map(); // id -> Vector3 (scene units, before origin shift)
     this.views = new Map();
+    this.probePaths = new Map();
 
     this.initRenderer();
     this.initScene();
@@ -48,6 +72,7 @@ class App {
     this.applyUrlParams();
     this.clock = new THREE.Clock();
     this.renderer.setAnimationLoop(() => this.frame());
+    this.loadSpacecraft();
   }
 
   initRenderer() {
@@ -115,12 +140,17 @@ class App {
     this.world.add(this.sunLight);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.045));
 
-    for (const body of [SUN, ...PLANETS, ...MOONS]) this.addView(body);
+    for (const body of [SUN, ...PLANETS, ...MOONS, ...this.comets]) this.addView(body);
 
     this.orbitLines = new Map();
     for (const p of PLANETS) {
       const l = new OrbitLine(256, p.color, 0.32);
       this.orbitLines.set(p.id, l);
+      this.world.add(l.line);
+    }
+    for (const c of this.comets) {
+      const l = new OrbitLine(720, c.color, 0.22);
+      this.orbitLines.set(c.id, l);
       this.world.add(l.line);
     }
     this.moonLines = new Map();
@@ -139,7 +169,12 @@ class App {
   }
 
   addView(body) {
-    const v = new BodyView(body, this.loadTex);
+    let v;
+    if (body.kind === 'comet') {
+      v = new CometView(body);
+      this.world.add(v.tails, v.coma);
+    } else if (body.kind === 'probe') v = new ProbeView(body);
+    else v = new BodyView(body, this.loadTex);
     v.labelEl.addEventListener('click', (e) => {
       e.stopPropagation();
       this.focus(body.id);
@@ -160,9 +195,62 @@ class App {
     if (this.focusId === id) this.focus('sun', true);
   }
 
-  /** Optional deep-link parameters: ?date=1969-07-20&focus=moon&mode=nbody&scale=real&speed=0 */
+  /** Spacecraft trajectories are large: load them after the first frames. */
+  async loadSpacecraft() {
+    let json;
+    try {
+      json = await loadJSON('data/spacecraft.json');
+    } catch (err) {
+      console.warn('Trajectoires des sondes indisponibles :', err.message);
+      return;
+    }
+    const probes = [];
+    for (const meta of SPACECRAFT) {
+      const data = json.probes[meta.id];
+      if (!data) continue;
+      const body = { ...meta, startJD: data.start, endJD: data.end };
+      BODY_BY_ID[body.id] = body;
+      const traj = new Trajectory(data);
+      probes.push({ body, traj });
+      this.addView(body);
+      const path = new ProbePath(this.pathSamples(traj), body.color);
+      path.flybyTimes = [traj.start, ...traj.flybys.map((f) => f.jd)];
+      this.probePaths.set(body.id, path);
+      this.world.add(path.group);
+    }
+    this.sim.setProbes(probes);
+    this.ui.addProbes(probes.map((p) => p.body));
+    if (this.pendingFocus && this.views.has(this.pendingFocus)) {
+      this.focus(this.pendingFocus);
+      this.pendingFocus = null;
+    }
+  }
+
+  /** Physical samples of a probe path (ephemeris planets), mapped later per scale. */
+  pathSamples(traj) {
+    const planetsAt = (t) => {
+      const cache = new Map();
+      return (id) => {
+        if (!cache.has(id)) cache.set(id, planetState(BODY_BY_ID[id], t).pos);
+        return cache.get(id);
+      };
+    };
+    return traj.pathTimes(6).map((jd) => {
+      const st = traj.state(jd);
+      const get = planetsAt(jd);
+      const corr = traj.correction(jd, get, st.pos);
+      const helio = [st.pos[0] + corr[0], st.pos[1] + corr[1], st.pos[2] + corr[2]];
+      return { jd, helio, local: probeLocalFrame(helio, get) };
+    });
+  }
+
+  /** Optional deep-link parameters: ?date=1969-07-20&focus=moon&mode=nbody&scale=real&speed=0&event=... */
   applyUrlParams() {
     const q = new URLSearchParams(window.location.search);
+    if (q.get('event') && EVENT_BY_ID[q.get('event')]) {
+      this.playEvent(q.get('event'), true);
+      return;
+    }
     if (q.get('date')) {
       const d = new Date(q.get('date') + (q.get('date').length <= 10 ? 'T12:00:00Z' : ''));
       if (!isNaN(d)) this.sim.setDate(dateToJD(d));
@@ -176,6 +264,7 @@ class App {
     if (q.get('speed') !== null) this.ui.setSpeedIndex(+q.get('speed'));
     if (q.get('rogue') !== null && this.sim.nbody) this.sim.launchRogueStar();
     const f = q.get('focus');
+    if (f && SPACECRAFT.some((s) => s.id === f)) this.pendingFocus = f;
     if (f && this.views.has(f)) {
       this.computeDisplay();
       this.focus(f);
@@ -183,6 +272,41 @@ class App {
       this.camera.position.set(0.35, 0.3, 1).setLength(this.transition.toDist);
       this.transition.fromDist = this.transition.toDist;
     }
+  }
+
+  // ---------- Guided tour ----------
+  playEvent(id, instant = false) {
+    const ev = EVENT_BY_ID[id];
+    if (!ev) return;
+    if (this.sim.mode !== 'ephemeris') this.setMode('ephemeris');
+    const readable = ev.scale !== 'real';
+    this.mapper.setReadable(readable);
+    this.mapper.t = this.mapper.target;
+    this.scaleKeep = null;
+    this.ui.syncScale(readable);
+    if (ev.show.includes('comets') && !this.showComets) this.ui.setToggle('toggle-comets', true);
+    if (ev.show.includes('probes') && !this.showProbes) this.ui.setToggle('toggle-probes', true);
+    this.sim.setDate(dateToJD(new Date(ev.date)));
+    this.ui.setSpeedValue(ev.speed);
+    this.computeDisplay();
+    const c = ev.camera;
+    const body = this.bodyData(ev.focus);
+    const dist = c.dist ? c.dist * this.mapper.radius(body) : this.mapper.distance(c.distAU);
+    // Direction the camera looks from, relative to the focused body.
+    const here = this.display.get(ev.focus) || new THREE.Vector3();
+    let dir;
+    if (c.from === 'top') dir = new THREE.Vector3(0, 1, 0.0001);
+    else {
+      const [anti, other] = c.from.startsWith('anti:') ? [true, c.from.slice(5)] : [false, c.from];
+      dir = (this.display.get(other) || new THREE.Vector3(1, 0, 0)).clone().sub(here).normalize();
+      if (anti) dir.negate();
+    }
+    const sph = new THREE.Spherical().setFromVector3(dir);
+    sph.theta += (c.az * Math.PI) / 180;
+    sph.phi = Math.min(Math.PI - 0.01, Math.max(0.01, sph.phi - (c.el * Math.PI) / 180));
+    dir.setFromSpherical(sph).normalize();
+    this.focus(ev.focus, false, { dist, distAU: c.distAU, dir, duration: instant ? 0.01 : 2.2 });
+    this.ui.showEvent(ev);
   }
 
   // ---------- Simulation events ----------
@@ -242,6 +366,16 @@ class App {
     for (const b of this.belts) b.points.visible = on;
   }
 
+  setComets(on) {
+    this.showComets = on;
+    if (!on && BODY_BY_ID[this.focusId]?.kind === 'comet') this.focus('sun', true);
+  }
+
+  setProbes(on) {
+    this.showProbes = on;
+    if (!on && BODY_BY_ID[this.focusId]?.kind === 'probe') this.focus('sun', true);
+  }
+
   setReadable(readable) {
     if (readable === this.mapper.readable) return;
     // Remember what the camera is looking at so the view stays coherent while
@@ -269,22 +403,34 @@ class App {
   }
 
   // ---------- Focus / camera ----------
-  focus(id, overview = false) {
+  /**
+   * Focus a body. opts: {dist (scene units), dir (unit Vector3, camera
+   * direction from the body), duration (s)}.
+   */
+  focus(id, overview = false, opts = {}) {
     if (!this.views.has(id)) return;
     const body = this.bodyData(id);
     const r = this.mapper.radius(body);
     let target;
-    if (overview) target = this.mapper.distance(6) * 2.6;
+    if (opts.dist) target = opts.dist;
+    else if (overview) target = this.mapper.distance(6) * 2.6;
     else if (id === 'sun') target = r * 7;
+    else if (body.kind === 'comet') target = Math.max(r * 8, this.mapper.distance(0.12));
+    else if (body.kind === 'probe') target = r * 9;
     else if (body.rings) target = r * 9;
     else target = r * 6.5;
     this.transition = {
       fromId: this.focusId,
       fromPoint: this.focusPoint.clone(),
       t: 0,
-      duration: 1.6,
+      duration: opts.duration ?? 1.6,
       fromDist: this.camera.position.length(),
       toDist: target,
+      fromDir: this.camera.position.clone().normalize(),
+      toDir: opts.dir || null,
+      // Close-ups are kept in body radii so that a scale change during the
+      // flight does not leave the camera inside the (growing) body.
+      toRadii: overview || opts.distAU ? null : target / r,
     };
     this.views.get(this.focusId)?.labelEl.classList.remove('selected');
     this.focusId = id;
@@ -301,13 +447,26 @@ class App {
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
       const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
       ray.setFromCamera(ndc, this.camera);
-      const meshes = [...this.views.values()].map((v) => v.mesh);
+      const meshes = [...this.views.values()].filter((v) => v.group.visible).map((v) => v.mesh);
       const hit = ray.intersectObjects(meshes, false)[0];
       if (hit) this.focus(hit.object.userData.bodyId);
     });
   }
 
   // ---------- Positions ----------
+  /** Display position of a spacecraft from its heliocentric position and optional planet-relative frame. */
+  placeProbe(helio, local, planetDisp, out) {
+    this.mapper.position(helio, out);
+    if (planetDisp) out.add(planetDisp.sun);
+    if (local && local.weight > 0) {
+      const planet = BODY_BY_ID[local.planet];
+      const near = ecl(local.offsetKm).normalize().multiplyScalar(this.mapper.moonDistance(Math.max(local.distanceKm, planet.radiusKm * 1.05), planet));
+      near.add(planetDisp.planet);
+      out.lerp(near, local.weight);
+    }
+    return out;
+  }
+
   computeDisplay() {
     const { sim, mapper, display } = this;
     const sunDisp = ecl(sim.sunAbs).multiplyScalar(UNITS_PER_AU);
@@ -318,7 +477,15 @@ class App {
     };
     get('sun').copy(sunDisp);
     for (const [id, helio] of sim.helio) {
-      if (id === 'sun' || BODY_BY_ID[id]?.parent) continue;
+      const body = BODY_BY_ID[id];
+      if (id === 'sun' || body?.parent) continue;
+      if (body?.kind === 'comet' && !this.showComets) { display.delete(id); continue; }
+      if (body?.kind === 'probe') {
+        if (!this.showProbes) { display.delete(id); continue; }
+        const local = sim.probeLocal.get(id);
+        this.placeProbe(helio, local, { sun: sunDisp, planet: local && display.get(local.planet) }, get(id));
+        continue;
+      }
       mapper.position(helio, get(id)).add(sunDisp);
     }
     for (const m of MOONS) {
@@ -333,13 +500,28 @@ class App {
   updateBodies() {
     const jd = this.sim.jd;
     const tmpX = new THREE.Vector3(), tmpY = new THREE.Vector3(), tmpZ = new THREE.Vector3();
+    const sunDisp = this.display.get('sun');
     for (const [id, view] of this.views) {
       const pos = this.display.get(id);
-      if (!pos) { view.group.visible = false; view.setLabelVisible(false); continue; }
+      const body = view.body;
+      if (!pos) {
+        view.group.visible = false;
+        view.setLabelVisible(false);
+        if (view.tails) { view.tails.visible = false; view.coma.visible = false; }
+        continue;
+      }
       view.group.visible = true;
       view.group.position.copy(pos);
-      view.group.scale.setScalar(this.mapper.radius(view.body));
-      const body = view.body;
+      view.group.scale.setScalar(this.mapper.radius(body));
+      if (body.kind === 'comet') {
+        view.updateTails(this.sim.helio.get(id), this.sim.helioVel.get(id), this.mapper, sunDisp, true);
+        continue;
+      }
+      if (body.kind === 'probe') {
+        const earth = this.display.get('earth');
+        if (earth) view.pointAt(earth);
+        continue;
+      }
       if (body.pole) {
         const o = bodyOrientation(body.pole, jd);
         tmpX.copy(ecl(o.meridian)); tmpZ.copy(ecl(o.pole));
@@ -356,7 +538,29 @@ class App {
       }
       if (view.clouds) view.clouds.rotation.y = (jd * 0.08) % (Math.PI * 2); // slow drift of the cloud layer
     }
-    this.sunLight.position.copy(this.display.get('sun'));
+    this.sunLight.position.copy(sunDisp);
+  }
+
+  /** Feed the eclipse shaders with real-km geometry around each shadowed body. */
+  updateShadows() {
+    const helio = this.sim.helio;
+    for (const id of SHADOWED) {
+      const view = this.views.get(id);
+      const hb = helio.get(id);
+      if (!view || !hb || !view.group.visible) continue;
+      const sun = ecl([-hb[0] * AU_KM, -hb[1] * AU_KM, -hb[2] * AU_KM]);
+      const occ = [];
+      for (const o of OCCLUDERS[id]) {
+        const ho = helio.get(o);
+        if (!ho) continue;
+        occ.push({
+          pos: ecl([(ho[0] - hb[0]) * AU_KM, (ho[1] - hb[1]) * AU_KM, (ho[2] - hb[2]) * AU_KM]),
+          radius: BODY_BY_ID[o].radiusKm * (o === 'earth' ? 1.02 : 1),
+          tint: UMBRA_TINT[o] || NO_TINT,
+        });
+      }
+      view.setEclipse(sun, occ);
+    }
   }
 
   updateOrbits() {
@@ -373,11 +577,39 @@ class App {
         mapper.position([pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2]], out).add(sunDisp);
       });
     }
+    for (const c of this.comets) {
+      const line = this.orbitLines.get(c.id);
+      line.line.visible = this.showOrbits && this.showComets && !nbody;
+      if (!line.line.visible) continue;
+      const pts = sampleOrbit(cometElements(c, sim.jd), line.segments);
+      line.update((s, out) => {
+        mapper.position([pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2]], out).add(sunDisp);
+      });
+    }
     for (const [id, trail] of this.trails) {
-      trail.line.visible = this.showOrbits && nbody && sim.helio.has(id);
+      const kind = BODY_BY_ID[id]?.kind;
+      trail.line.visible = this.showOrbits && nbody && sim.helio.has(id) && (kind !== 'comet' || this.showComets);
       if (!trail.line.visible) continue;
       trail.update(mapper, sim.helio.get(id));
       trail.line.position.copy(sunDisp);
+    }
+    // Spacecraft paths, re-mapped only when the scale or the current flyby
+    // changes. The planet-relative layout (which bends the path around the
+    // inflated planet in "Lisible" scale) is only applied to the flyby
+    // happening now: elsewhere it would draw loops around empty space.
+    const tmp = new THREE.Vector3();
+    const zero = new THREE.Vector3();
+    for (const [id, path] of this.probePaths) {
+      path.group.visible = this.showOrbits && this.showProbes;
+      if (!path.group.visible) continue;
+      const active = path.flybyTimes.find((t) => Math.abs(t - sim.jd) < 90) ?? null;
+      path.remap(`${mapper.t}|${active}`, (s, out) => {
+        const local = active !== null && Math.abs(s.jd - active) < 90 ? s.local : null;
+        const planet = local ? mapper.position(local.planetHelio, tmp) : null;
+        return this.placeProbe(s.helio, local, { sun: zero, planet }, out);
+      });
+      path.setTime(sim.jd);
+      path.group.position.copy(sunDisp);
     }
     // Moon orbits: only shown when the camera is close to the planet.
     const camWorld = this.camera.position;
@@ -410,7 +642,9 @@ class App {
       const k = ease(tr.t);
       const from = this.display.get(tr.fromId) || tr.fromPoint;
       this.focusPoint.lerpVectors(from, target, k);
+      if (tr.toRadii) tr.toDist = tr.toRadii * this.mapper.radius(this.bodyData(this.focusId));
       const d = Math.exp(Math.log(tr.fromDist) + (Math.log(tr.toDist) - Math.log(tr.fromDist)) * k);
+      if (tr.toDir) cam.position.copy(tr.fromDir).lerp(tr.toDir, k).normalize();
       cam.position.setLength(d);
       if (tr.t >= 1) this.transition = null;
     } else {
@@ -428,8 +662,9 @@ class App {
     const r = this.mapper.radius(this.bodyData(this.focusId));
     this.controls.minDistance = r * 1.25;
     this.controls.update();
+    if (cam.position.length() < r * 1.2) cam.position.setLength(r * 1.2);
     const dist = cam.position.length();
-    cam.near = Math.max(1e-7, Math.min(dist * 0.002, r * 0.2));
+    cam.near = Math.max(1e-9, Math.min(dist * 0.002, r * 0.2));
     cam.far = 2e5;
     cam.updateProjectionMatrix();
     this.sky.position.copy(cam.position);
@@ -441,6 +676,7 @@ class App {
     this.mapper.update(dt);
     this.computeDisplay();
     this.updateBodies();
+    this.updateShadows();
     this.updateCamera(dt);
     this.updateOrbits();
     if (this.belts[0].points.visible) for (const b of this.belts) b.update(this.sim.jd, this.mapper);
@@ -456,9 +692,24 @@ class App {
   }
 }
 
-try {
-  window.app = new App();
-} catch (err) {
+async function start() {
+  try {
+    applyMoonOrbits(await loadJSON('data/moons.json'));
+  } catch (err) {
+    console.warn('Éléments des lunes indisponibles, orbites approchées :', err.message);
+  }
+  let comets = [];
+  try {
+    const json = await loadJSON('data/comets.json');
+    comets = COMETS.map((c) => ({ ...c, ...json.comets[c.id] })).filter((c) => c.sets?.length);
+    for (const c of comets) BODY_BY_ID[c.id] = c;
+  } catch (err) {
+    console.warn('Comètes indisponibles :', err.message);
+  }
+  window.app = new App(comets);
+}
+
+start().catch((err) => {
   console.error(err);
   document.getElementById('loading').innerHTML = `<p style="color:#ff8a65;padding:24px">Impossible de démarrer la 3D (WebGL indisponible ?)<br><small>${err.message}</small></p>`;
-}
+});

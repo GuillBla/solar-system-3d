@@ -68,6 +68,7 @@ input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.85); cu
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(122, 167, 255, 0.16); color: #b9cdff; }
 .badge.nbody { background: rgba(255, 191, 94, 0.18); color: var(--accent); }
 .badge.warn { background: rgba(255, 138, 101, 0.18); color: var(--warn); }
+.badge.eclipse { background: rgba(255, 92, 92, 0.2); color: #ffb0a0; }
 
 /* ---------- Options ---------- */
 #options-panel {
@@ -95,6 +96,8 @@ input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.85); cu
 #nav-panel button:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
 #nav-panel button.active { color: var(--text); background: rgba(255, 255, 255, 0.12); }
 #nav-panel button.moon { padding-left: 26px; font-size: 12.5px; }
+#nav-panel .nav-header { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #6c7697; padding: 8px 10px 3px; }
+#nav-panel button.comet, #nav-panel button.probe { font-size: 12.5px; }
 #nav-panel .key { margin-left: auto; font-size: 10px; color: #5f6886; padding-left: 10px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); flex: none; }
 
@@ -105,9 +108,10 @@ input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.85); cu
 .swatch { width: 34px; height: 34px; border-radius: 50%; flex: none; }
 #info-panel h2 { margin: 0; font-size: 20px; }
 #info-panel p { line-height: 1.55; color: #c7cee3; margin: 14px 0; }
-#info-stats { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; }
-#info-stats dt { color: var(--muted); }
-#info-stats dd { margin: 0; text-align: right; white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+#info-stats { display: flex; flex-direction: column; gap: 7px; margin: 0; }
+#info-stats .stat { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+#info-stats dt { color: var(--muted); min-width: 0; }
+#info-stats dd { margin: 0; flex: none; text-align: right; white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: -0.01em; }
 #info-stats dd.highlight { color: var(--accent); }
 
 /* ---------- Sandbox ---------- */
@@ -120,6 +124,28 @@ body.nbody #info-panel { max-height: calc(100vh - 380px); }
 .slider input { width: 100%; accent-color: var(--accent); }
 .row { display: flex; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
 #rogue-btn { background: rgba(255, 158, 107, 0.2); border-color: rgba(255, 158, 107, 0.4); }
+
+/* ---------- Guided tour ---------- */
+#events-btn { background: rgba(255, 191, 94, 0.16); border-color: rgba(255, 191, 94, 0.35); color: var(--accent); white-space: nowrap; }
+#events-panel { top: 76px; right: var(--gutter); width: 340px; padding: 14px 14px 10px; max-height: calc(100vh - 170px); overflow-y: auto; z-index: 20; }
+.events-head { display: flex; justify-content: space-between; align-items: center; }
+#events-panel h3, #event-card h3 { margin: 0; font-size: 15px; }
+#events-panel p { margin: 6px 0 10px; }
+#events-list { display: flex; flex-direction: column; gap: 2px; }
+#events-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; background: transparent; border-color: transparent; padding: 7px 10px; }
+#events-list button:hover { background: rgba(255, 255, 255, 0.08); }
+#events-list button.active { background: rgba(255, 191, 94, 0.14); }
+.ev-title { font-weight: 500; }
+.ev-when { font-size: 11.5px; color: var(--muted); }
+.close { font-size: 20px; line-height: 1; padding: 4px 10px; }
+#event-card { top: 76px; right: var(--gutter); width: 360px; padding: 14px 16px 10px; z-index: 15; }
+.event-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.event-when { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+#event-caption { margin: 8px 0 10px; line-height: 1.5; color: #c7cee3; }
+.event-nav { display: flex; align-items: center; gap: 8px; }
+.event-nav #event-step { margin: 0 auto; }
+#event-next { background: var(--accent); color: #1a1205; border: none; font-weight: 600; }
+body.touring #info-panel { display: none; }
 
 /* ---------- Time ---------- */
 #time-panel {
@@ -146,6 +172,8 @@ kbd { font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6p
 .label .dot { width: 6px; height: 6px; }
 .label-moon { font-size: 11px; color: rgba(200, 206, 225, 0.75); }
 .label-star .name { color: var(--accent); }
+.label-comet { font-size: 11.5px; color: rgba(205, 230, 255, 0.9); }
+.label-probe { font-size: 11px; color: rgba(255, 236, 200, 0.85); }
 .label.selected .name { color: #fff; font-weight: 700; }
 
 /* ---------- Loading ---------- */
@@ -167,7 +195,9 @@ kbd { font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6p
   #options-panel { top: auto; bottom: 74px; left: var(--gutter); right: var(--gutter); justify-content: center; padding: 6px; gap: 6px; }
   .toggles { gap: 8px; font-size: 12px; }
   #nav-panel { top: 104px; right: var(--gutter); flex-direction: row; overflow-x: auto; max-height: none; padding: 4px; }
-  #nav-panel .key { display: none; }
+  #nav-panel .nav-header { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #6c7697; padding: 8px 10px 3px; }
+#nav-panel button.comet, #nav-panel button.probe { font-size: 12.5px; }
+#nav-panel .key { display: none; }
   #nav-panel { scrollbar-width: none; }
   #nav-panel::-webkit-scrollbar { display: none; }
   #help-btn { display: none; }
@@ -175,7 +205,10 @@ kbd { font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6p
   #info-panel { top: auto; bottom: 158px; left: var(--gutter); right: var(--gutter); width: auto; max-height: 34vh; }
   #sandbox-panel { bottom: 158px; left: var(--gutter); right: var(--gutter); width: auto; }
   body.nbody #info-panel { display: none; }
-  #info-stats dd { white-space: normal; }
+  #info-stats dd { font-size: 11.5px; }
+  #events-panel { top: auto; bottom: 158px; left: var(--gutter); right: var(--gutter); width: auto; max-height: 50vh; }
+  #event-card { top: auto; bottom: 158px; left: var(--gutter); right: var(--gutter); width: auto; }
+  #events-btn { padding: 5px 9px; }
   #time-panel { left: var(--gutter); right: var(--gutter); transform: none; justify-content: center; flex-wrap: wrap; }
   #date-input { max-width: 140px; }
   .segmented button { padding: 5px 9px; }

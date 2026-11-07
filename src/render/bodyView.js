@@ -3,6 +3,10 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { proceduralTexture, glowTexture } from './textures.js';
+import { addEclipseShadows, addRingPlanetShadow, MAX_OCCLUDERS } from './shadows.js';
+
+// Bodies whose surface receives eclipse shadows (see App.updateShadows).
+export const SHADOWED = new Set(['earth', 'moon', 'jupiter', 'io', 'europa', 'ganymede', 'callisto', 'saturn', 'titan']);
 
 const SPHERE = new THREE.SphereGeometry(1, 96, 48);
 const SPHERE_LOW = new THREE.SphereGeometry(1, 48, 24);
@@ -87,6 +91,17 @@ export class BodyView {
       material = new THREE.MeshStandardMaterial({ map, roughness: 0.95, metalness: 0 });
       if (body.id === 'earth') this.setupEarth(material, loadTex);
       if (['jupiter', 'saturn', 'uranus', 'neptune', 'venus'].includes(body.id)) material.roughness = 1;
+      if (body.rings) this.ringTex = loadTex(body.rings.texture);
+      if (SHADOWED.has(body.id)) {
+        const ring = body.rings ? { inner: body.rings.inner / body.radiusKm, outer: body.rings.outer / body.radiusKm, texture: this.ringTex } : null;
+        this.eclipse = [addEclipseShadows(material, { key: body.id, ring })];
+        this.eclipse[0].uEclR.value = body.radiusKm;
+        if (this.clouds) {
+          const u = addEclipseShadows(this.clouds.material, { key: 'clouds' });
+          u.uEclR.value = body.radiusKm * 1.008;
+          this.eclipse.push(u);
+        }
+      }
     }
     const geo = body.parent ? SPHERE_LOW : SPHERE;
     this.mesh = new THREE.Mesh(geo, material);
@@ -180,18 +195,43 @@ export class BodyView {
       const d = Math.hypot(pos.getX(i), pos.getY(i));
       uv.setXY(i, (d - inner) / (outer - inner), 0.5);
     }
-    const tex = loadTex(r.texture);
     const mat = new THREE.MeshStandardMaterial({
-      map: tex,
+      map: this.ringTex,
       transparent: true,
       side: THREE.DoubleSide,
       roughness: 1,
       depthWrite: false,
       opacity: 0.95,
     });
+    this.ringShadow = addRingPlanetShadow(mat);
     const ring = new THREE.Mesh(geo, mat);
     ring.raycast = () => {};
     this.orient.add(ring); // ring lies in the body's equatorial (XY) plane
+  }
+
+  /**
+   * Eclipse inputs, all relative to this body's center in real km (three.js
+   * axes): the Sun, and up to MAX_OCCLUDERS spheres {pos, radius, tint}.
+   */
+  setEclipse(sunPos, occluders) {
+    if (!this.eclipse) return;
+    for (const u of this.eclipse) {
+      u.uSunPos.value.copy(sunPos);
+      const n = Math.min(occluders.length, MAX_OCCLUDERS);
+      for (let k = 0; k < n; k++) {
+        const o = occluders[k];
+        u.uOcc.value[k].set(o.pos.x, o.pos.y, o.pos.z, o.radius);
+        u.uOccTint.value[k].copy(o.tint);
+      }
+      u.uOccN.value = n;
+    }
+    if (this.body.rings) {
+      // Sun direction in the body frame (rings lie in its XY plane).
+      const q = this.orient.quaternion.clone().invert();
+      const dir = sunPos.clone().normalize().applyQuaternion(q);
+      this.eclipse[0].uRingSun.value.copy(dir);
+      this.ringShadow.uRingSun.value.copy(dir);
+    }
   }
 
   /** Set the body-fixed frame from three.js basis vectors. */

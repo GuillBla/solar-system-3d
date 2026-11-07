@@ -4,11 +4,35 @@
 
 import { planetState, AU_KM, GM_SUN } from './physics/kepler.js';
 import { NBodySystem } from './physics/nbody.js';
-import { moonOffset, earthFromBarycenter } from './physics/orientation.js';
+import { moonOffset } from './physics/orientation.js';
+import { cometState } from './physics/comets.js';
 import { PLANETS, MOONS, SUN, SUN_MASS_KG, BODY_BY_ID } from './data/bodies.js';
 import { dateToJD } from './time.js';
 
 const MOON = MOONS.find((m) => m.id === 'moon');
+
+// Sphere of influence of the planets visited by spacecraft (km): inside it, a
+// probe is drawn relative to the planet (see App.computeDisplay).
+export const SOI_KM = { earth: 9.25e5, jupiter: 4.82e7, saturn: 5.48e7, uranus: 5.18e7, neptune: 8.66e7, pluto: 3.1e6 };
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/**
+ * Planet a spacecraft at `pos` (AU) should be drawn relative to, if any:
+ * {planet, offsetKm, distanceKm, weight}, weight fading from 1 (deep inside the
+ * sphere of influence) to 0 (outside). `planetPos(id)` gives planet positions.
+ */
+export function probeLocalFrame(pos, planetPos) {
+  let best = null;
+  for (const [pid, soi] of Object.entries(SOI_KM)) {
+    const pp = planetPos(pid);
+    if (!pp) continue;
+    const off = [(pos[0] - pp[0]) * AU_KM, (pos[1] - pp[1]) * AU_KM, (pos[2] - pp[2]) * AU_KM];
+    const d = Math.hypot(off[0], off[1], off[2]);
+    const weight = 1 - smooth(0.1 * soi, 0.3 * soi, d);
+    if (weight > 0 && (!best || weight > best.weight)) best = { planet: pid, offsetKm: off, distanceKm: d, weight, planetHelio: pp };
+  }
+  return best;
+}
 
 export const ROGUE_STAR = {
   id: 'rogue',
@@ -34,6 +58,22 @@ export class Simulation {
     this.helio = new Map();
     this.helioVel = new Map();
     this.sunAbs = [0, 0, 0];
+    this.comets = []; // comet definitions with their element sets
+    this.probes = []; // [{ body, traj }]
+    this.probeLocal = new Map(); // probe id -> { planet, offsetKm, weight }
+    this.compute();
+  }
+
+  /** Register comets (data/comets.json merged with metadata). */
+  setComets(list) {
+    this.comets = list;
+    if (this.nbody) this.initNBody();
+    this.compute();
+  }
+
+  /** Register spacecraft trajectories (loaded asynchronously). */
+  setProbes(list) {
+    this.probes = list;
     this.compute();
   }
 
@@ -65,6 +105,12 @@ export class Simulation {
       if (p.id === 'earth') m += MOON.massKg / SUN_MASS_KG; // Earth–Moon barycenter
       const s = planetState(p, this.jd, true);
       sys.add(p.id, m, s.pos, s.vel);
+    }
+    // Comets are massless test particles: they feel the planets (a heavier
+    // Jupiter deflects them) but do not pull on anything.
+    for (const c of this.comets) {
+      const s = cometState(c, this.jd);
+      sys.add(c.id, 0, s.pos, s.vel);
     }
     // Sandbox multipliers apply on top of the real masses (velocities stay the
     // real ones, so a heavier Sun immediately tightens all orbits).
@@ -165,22 +211,54 @@ export class Simulation {
         helio.set(p.id, st.pos);
         helioVel.set(p.id, st.vel);
       }
+      for (const c of this.comets) {
+        const st = cometState(c, this.jd);
+        helio.set(c.id, st.pos);
+        helioVel.set(c.id, st.vel);
+      }
     }
-    // Moons (kinematic), and Earth offset from the Earth–Moon barycenter.
+    // Moons (kinematic). The planet ephemerides give the barycenter of each
+    // planet + moons system: shift the planet by -Σ μ·offset (matters for the
+    // Earth–Moon and Pluto–Charon pairs).
     this.moonOffsets = new Map();
+    const shift = new Map();
     for (const m of MOONS) {
       const parent = BODY_BY_ID[m.parent];
       const off = moonOffset(m, parent, this.jd);
       this.moonOffsets.set(m.id, off);
+      const mu = m.massKg / (parent.massKg + m.massKg);
+      const sh = shift.get(m.parent) || [0, 0, 0];
+      for (let k = 0; k < 3; k++) sh[k] -= (off.offsetKm[k] * mu) / AU_KM;
+      shift.set(m.parent, sh);
     }
-    const emb = helio.get('earth');
-    const earthShift = earthFromBarycenter(this.moonOffsets.get('moon').offsetKm, BODY_BY_ID.earth.massKg, MOON.massKg);
-    helio.set('earth', emb.map((v, k) => v + earthShift[k]));
+    for (const [id, sh] of shift) {
+      const p = helio.get(id);
+      helio.set(id, [p[0] + sh[0], p[1] + sh[1], p[2] + sh[2]]);
+    }
     for (const m of MOONS) {
       const pp = helio.get(m.parent);
       const off = this.moonOffsets.get(m.id).offsetKm;
       helio.set(m.id, pp.map((v, k) => v + off[k] / AU_KM));
       helioVel.set(m.id, helioVel.get(m.parent));
+    }
+    this.computeProbes();
+  }
+
+  /** Spacecraft: interpolated true trajectory, re-attached to the drawn planets near flybys. */
+  computeProbes() {
+    const { helio, helioVel } = this;
+    this.probeLocal.clear();
+    this.probeExtrapolated = new Map();
+    for (const { body, traj } of this.probes) {
+      const st = traj.state(this.jd);
+      if (!st) continue;
+      const corr = traj.correction(this.jd, (id) => helio.get(id), st.pos);
+      const pos = [st.pos[0] + corr[0], st.pos[1] + corr[1], st.pos[2] + corr[2]];
+      helio.set(body.id, pos);
+      helioVel.set(body.id, st.vel);
+      const local = probeLocalFrame(pos, (id) => helio.get(id));
+      if (local) this.probeLocal.set(body.id, local);
+      this.probeExtrapolated.set(body.id, st.extrapolated);
     }
   }
 
@@ -205,11 +283,12 @@ export class Simulation {
   deviationKm(id) {
     if (!this.nbody) return null;
     const planet = PLANETS.find((p) => p.id === id);
-    if (!planet) return null;
+    const comet = this.comets.find((c) => c.id === id);
+    if (!planet && !comet) return null;
     const i = this.nbody.indexOf(id);
     if (i < 0) return null;
     const p = this.nbody.pos[i], s = this.nbody.pos[0];
-    const k = planetState(planet, this.jd).pos;
+    const k = planet ? planetState(planet, this.jd).pos : cometState(comet, this.jd).pos;
     return Math.hypot(p[0] - s[0] - k[0], p[1] - s[1] - k[1], p[2] - s[2] - k[2]) * AU_KM;
   }
 

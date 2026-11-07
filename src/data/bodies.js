@@ -163,10 +163,11 @@ export const PLANETS = [
   },
 ];
 
-// Moons. Positions are computed kinematically relative to their parent.
-//  frame 'ecliptic'  : full Keplerian elements in the ecliptic (the Moon)
-//  frame 'equatorial': circular orbit in the parent's equatorial plane,
-//                      mean longitude L = L0 + Ld * d (deg), optional tilt.
+// Moons. Positions are computed kinematically relative to their parent:
+//  - the Moon with the truncated ELP-2000 theory (physics/moon.js);
+//  - the others with mean elements fitted to JPL Horizons (data/moons.json,
+//    attached at startup as `orbit`, see data/loader.js).
+// distanceKm / periodDays are nominal values used for display and info.
 export const MOONS = [
   {
     id: 'moon',
@@ -177,9 +178,6 @@ export const MOONS = [
     massKg: 7.342e22,
     distanceKm: 384400,
     periodDays: 27.321661,
-    frame: 'ecliptic',
-    // L, node, perigee: mean elements (deg) = c0 + c1 * d
-    lunar: { L: [218.316, 13.176396], node: [125.045, -0.0529538], peri: [83.353, 0.1114], e: 0.0549, i: 5.145 },
     pole: { ra: 269.9949, dec: 66.5392, W0: 38.3213, Wd: 13.17635815 },
     texture: '2k_moon.jpg',
     color: '#cfcfcf',
@@ -189,7 +187,6 @@ export const MOONS = [
   {
     id: 'io', name: 'Io', parent: 'jupiter', type: 'Lune galiléenne de Jupiter',
     radiusKm: 1821.6, massKg: 8.932e22, distanceKm: 421700, periodDays: 1.769138,
-    frame: 'equatorial', L0: 106.07719, Ld: 203.48895579,
     procedural: { base: '#e8d36a', dark: '#a8662c', light: '#fff4b8', seed: 3 },
     color: '#f0d860',
     description: "Le corps le plus volcanique du Système solaire : plus de 400 volcans actifs, chauffés par les marées gravitationnelles de Jupiter.",
@@ -197,7 +194,6 @@ export const MOONS = [
   {
     id: 'europa', name: 'Europe', parent: 'jupiter', type: 'Lune galiléenne de Jupiter',
     radiusKm: 1560.8, massKg: 4.7998e22, distanceKm: 671034, periodDays: 3.551181,
-    frame: 'equatorial', L0: 175.73161, Ld: 101.374724735,
     procedural: { base: '#d9cbb3', dark: '#8b5a3c', light: '#f6f1e6', seed: 5, cracks: true },
     color: '#e7dcc4',
     description: "Sous sa croûte de glace se cache un océan d'eau liquide plus vaste que tous ceux de la Terre : l'un des meilleurs candidats pour la vie extraterrestre.",
@@ -205,7 +201,6 @@ export const MOONS = [
   {
     id: 'ganymede', name: 'Ganymède', parent: 'jupiter', type: 'Lune galiléenne de Jupiter',
     radiusKm: 2634.1, massKg: 1.4819e23, distanceKm: 1070412, periodDays: 7.154553,
-    frame: 'equatorial', L0: 120.55883, Ld: 50.317609207,
     procedural: { base: '#8c8073', dark: '#4e463e', light: '#cfc6ba', seed: 7 },
     color: '#a99e90',
     description: "La plus grande lune du Système solaire, plus grande que Mercure. C'est la seule lune connue à posséder son propre champ magnétique.",
@@ -213,7 +208,6 @@ export const MOONS = [
   {
     id: 'callisto', name: 'Callisto', parent: 'jupiter', type: 'Lune galiléenne de Jupiter',
     radiusKm: 2410.3, massKg: 1.0759e23, distanceKm: 1882709, periodDays: 16.689017,
-    frame: 'equatorial', L0: 84.44459, Ld: 21.571071177,
     procedural: { base: '#5d5348', dark: '#2e2822', light: '#b5aa9b', seed: 11 },
     color: '#8a7f72',
     description: "La surface la plus cratérisée du Système solaire : un paysage quasi inchangé depuis 4 milliards d'années.",
@@ -221,7 +215,6 @@ export const MOONS = [
   {
     id: 'titan', name: 'Titan', parent: 'saturn', type: 'Lune de Saturne',
     radiusKm: 2574.7, massKg: 1.3452e23, distanceKm: 1221870, periodDays: 15.945,
-    frame: 'equatorial', L0: 0, Ld: 360 / 15.945,
     procedural: { base: '#d8a24a', dark: '#9a6a2a', light: '#f0c878', seed: 13, hazy: true },
     color: '#e0a850',
     description: "Seul satellite doté d'une atmosphère épaisse (1,5 fois la pression terrestre). Il y pleut du méthane, qui forme des rivières et des lacs. La sonde Huygens s'y est posée en 2005.",
@@ -229,7 +222,6 @@ export const MOONS = [
   {
     id: 'triton', name: 'Triton', parent: 'neptune', type: 'Lune de Neptune',
     radiusKm: 1353.4, massKg: 2.139e22, distanceKm: 354759, periodDays: -5.876854,
-    frame: 'equatorial', L0: 0, Ld: -360 / 5.876854, tilt: 23,
     procedural: { base: '#d8c9c0', dark: '#9b8a80', light: '#f5ece6', seed: 17 },
     color: '#e0d2c8',
     description: "Elle tourne autour de Neptune à l'envers (orbite rétrograde) : c'est probablement un objet de la ceinture de Kuiper capturé. Des geysers d'azote jaillissent de sa surface.",
@@ -237,7 +229,6 @@ export const MOONS = [
   {
     id: 'charon', name: 'Charon', parent: 'pluto', type: 'Lune de Pluton',
     radiusKm: 606, massKg: 1.586e21, distanceKm: 19591, periodDays: 6.3872,
-    frame: 'equatorial', lockedToParentRotation: true,
     procedural: { base: '#8e8a86', dark: '#4a4440', light: '#c9c4bf', seed: 19 },
     color: '#a8a39e',
     description: "Si grosse par rapport à Pluton (la moitié de son diamètre) que les deux tournent autour d'un point situé hors de Pluton. Les deux astres se montrent toujours la même face.",

@@ -3,6 +3,7 @@
 Simulation 3D interactive du Système solaire dans le navigateur (Three.js).
 
 **▶ Démo en ligne : https://guillbla.github.io/solar-system-3d/**
+
 Les planètes, les lunes, les comètes et les sondes sont à leur **vraie position**, à n'importe quelle date. Les **éclipses** se produisent au bon endroit et au bon moment, une **visite guidée** fait revivre les grands événements, et un **bac à sable gravitationnel N-corps** permet de voir ce qui se passe quand on joue avec la gravité.
 
 ![Vue d'ensemble](docs/overview.png)

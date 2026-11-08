@@ -42,8 +42,8 @@ export class CometView {
     geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage));
     this.tails = new THREE.Points(geo, new THREE.PointsMaterial({
-      size: 2.2, sizeAttenuation: false, vertexColors: true, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false,
+      size: 3.5, sizeAttenuation: false, vertexColors: true, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, map: comaSprite(),
     }));
     this.tails.frustumCulled = false;
     this.tails.raycast = () => {};
@@ -64,7 +64,9 @@ export class CometView {
     this.lat = new Float32Array(n * 2);
     this.lag = new Float32Array(n);
     for (let k = 0; k < n; k++) {
-      this.s[k] = Math.pow(rand(), 1.6);
+      // Start slightly away from the nucleus (the coma draws the head) and
+      // avoid piling hundreds of particles on the same pixels.
+      this.s[k] = 0.03 + 0.97 * Math.pow(rand(), 1.25);
       this.lat[k * 2] = gauss();
       this.lat[k * 2 + 1] = gauss();
       this.lag[k] = 0.6 + 0.8 * rand();
@@ -85,8 +87,10 @@ export class CometView {
   /**
    * @param helio  heliocentric position (AU), vel: velocity (AU/day)
    * @param mapper ScaleMapper, sunDisp: display position of the Sun
+   * @param view   optional { camera, offset (world group position), heightPx }
+   *               used to dim the tail when it only covers a few pixels.
    */
-  updateTails(helio, vel, mapper, sunDisp, visible) {
+  updateTails(helio, vel, mapper, sunDisp, visible, view) {
     const r = Math.hypot(...helio);
     const act = cometActivity(r) * (this.body.tailScale || 1);
     this.activity = act;
@@ -98,8 +102,9 @@ export class CometView {
     // Faint, short tails would pile up additively into a blob: fade them in.
     const vis = Math.min(1, Math.max(0, (act - 0.03) / 0.5));
     const visEased = vis * vis * (3 - 2 * vis);
-    this.coma.material.size = 4 + 16 * visEased;
-    this.coma.material.opacity = 0.3 + 0.7 * visEased;
+    this.coma.material.size = 4 + 12 * visEased;
+    // Keep the coma below the bloom threshold: it is a fuzzy head, not a star.
+    this.coma.material.opacity = 0.25 + 0.35 * visEased;
     if (!this.tails.visible) return;
 
     const anti = helio.map((v) => v / r); // away from the Sun
@@ -112,7 +117,20 @@ export class CometView {
     const ey = [anti[1] * ex[2] - anti[2] * ex[1], anti[2] * ex[0] - anti[0] * ex[2], anti[0] * ex[1] - anti[1] * ex[0]];
     const Lion = Math.min(1.2, 0.2 * act);
     const Ldust = Lion * 0.55;
-    const bright = 0.3 * visEased;
+    // Additive particles sum up: if the whole tail is squeezed into a few
+    // pixels (seen from far away) the sum blows past the bloom threshold and
+    // the comet glows like the Sun. Scale brightness with the tail's on-screen
+    // length so the surface brightness stays roughly constant.
+    let screenDim = 1;
+    if (view) {
+      const tip = helio.map((v, c) => v + anti[c] * Lion);
+      const a = mapper.position(helio, new THREE.Vector3()).add(sunDisp).add(view.offset).project(view.camera);
+      const b = mapper.position(tip, new THREE.Vector3()).add(sunDisp).add(view.offset).project(view.camera);
+      const px = Math.hypot(a.x - b.x, a.y - b.y) * 0.5 * view.heightPx;
+      screenDim = Math.min(1, Math.max(0, (px - 15) / 300));
+      screenDim *= screenDim;
+    }
+    const bright = 0.6 * visEased * screenDim;
     const p = [0, 0, 0];
     const out = new THREE.Vector3();
     for (let k = 0; k < PARTICLES * 2; k++) {

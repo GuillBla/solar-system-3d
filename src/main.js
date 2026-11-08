@@ -514,7 +514,8 @@ class App {
       view.group.position.copy(pos);
       view.group.scale.setScalar(this.mapper.radius(body));
       if (body.kind === 'comet') {
-        view.updateTails(this.sim.helio.get(id), this.sim.helioVel.get(id), this.mapper, sunDisp, true);
+        view.updateTails(this.sim.helio.get(id), this.sim.helioVel.get(id), this.mapper, sunDisp, true,
+          { camera: this.camera, offset: this.world.position, heightPx: this.renderer.domElement.clientHeight });
         continue;
       }
       if (body.kind === 'probe') {
